@@ -6,6 +6,7 @@
 #define TP_HWMON 1
 #define TP_ACCEL 2
 #define TP_CELLS 4
+#define TP_PD 16
 
 /* These profiles describe the existing paged EC and accelerometer mailbox protocols.
  * A different protocol needs implementation/evidence, not invented parameters.
@@ -22,6 +23,8 @@ struct tp_ec_profile {
  struct tp_temp_channel temps[TP_MAX_TEMPS];
  bool hide_unavailable;
  bool x230_electrical; /* Verified CC/CD scaling and battery page layout. */
+ bool n24ht37w_pd; /* Fixed PD-controller contract cache, opt-in. */
+ bool n24ht37w_cells; /* LGC 01AV420 BAT0 vendor cache, opt-in. */
  bool g2ht35ww_cells;  /* Fixed debug RAM layout, never granted by an override. */
  unsigned short mailbox_port;
  bool check_command_errors;
@@ -54,6 +57,7 @@ static const struct tp_ec_profile tp_profiles[] = {
    {8, "Fan area"}, {9, "DIMM area"}, {10, "WWAN area"},
    {11, "EC slot 11"}, {12, "dGPU VRM area"}, {13, "WLAN area"}
   },
+  .n24ht37w_cells = true, .n24ht37w_pd = true,
   .hide_unavailable = true, .mailbox_port = 0x1610,
   .check_command_errors = true, .accel_xyz = true,
  }
@@ -70,8 +74,8 @@ struct tp_ec_match {
 };
 static const struct tp_ec_match tp_matches[] = {
  {"ThinkPad X230", "G2HT35WW", "x230", TP_HWMON | TP_ACCEL | TP_CELLS},
- {"ThinkPad T480", "N24HT37W", "t480", TP_HWMON | TP_ACCEL},
- {"T480", "N24HT37W", "t480", TP_HWMON | TP_ACCEL},
+ {"ThinkPad T480", "N24HT37W", "t480", TP_HWMON | TP_ACCEL | TP_CELLS | TP_PD},
+ {"T480", "N24HT37W", "t480", TP_HWMON | TP_ACCEL | TP_CELLS | TP_PD},
 };
 
 static inline bool tp_model_matches(const char *model, const char *name,

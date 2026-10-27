@@ -71,7 +71,7 @@ int main(void) {
      assert(!strcmp(m->profile,previous->profile));
    }
   }
-  for(unsigned feature=TP_HWMON;feature<=TP_CELLS;feature<<=1) {
+  for(unsigned feature=TP_HWMON;feature<=TP_PD;feature<<=1) {
    reset();version=m->model;fw=m->firmware;
    int ret=select_ec_profile(feature);
    assert((ret==0)==!!(m->features&feature));
@@ -80,7 +80,7 @@ int main(void) {
   }
  }
  reset();assert(!select_ec_profile(TP_HWMON) && verified && reads==8);
- assert(!tp_feature_verified(TP_CELLS));
+ assert(tp_feature_verified(TP_CELLS));
  reset();version="ThinkPad X230";fw="G2HT35WW";
  assert(!select_ec_profile(TP_ACCEL) && tp_feature_verified(TP_CELLS));
  reset();version="ThinkPad UNLISTED";fw="G2HT35WW";

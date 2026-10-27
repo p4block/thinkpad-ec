@@ -21,7 +21,7 @@ typedef unsigned short umode_t;
 #define BIT(n) (1ul<<(n))
 #include "profiles.h"
 static const struct tp_ec_profile *ec_profile;
-static bool verified,allow_unsupported,cell_voltages,known_ec_layout;
+static bool verified,allow_unsupported,cell_voltages,known_ec_layout,pd_contract,known_pd_layout;
 static unsigned long present;
 enum hwmon_sensor_types {hwmon_temp,hwmon_curr,hwmon_power,hwmon_in};
 enum {hwmon_temp_input=1,hwmon_temp_label,hwmon_curr_input,hwmon_curr_label,
@@ -47,6 +47,17 @@ int main(void) {
  assert(visible(NULL,hwmon_temp,hwmon_temp_input,2)==0444);
  assert(!visible(NULL,hwmon_temp,hwmon_temp_input,3));
  assert(!visible(NULL,hwmon_in,hwmon_in_input,0));
+ known_ec_layout=true;cell_voltages=true;
+ assert(visible(NULL,hwmon_in,hwmon_in_input,1)==0444);
+ assert(!visible(NULL,hwmon_power,hwmon_power_input,0));
+ cell_voltages=false;assert(!visible(NULL,hwmon_in,hwmon_in_input,1));
+ pd_contract=true;known_pd_layout=true;
+ assert(visible(NULL,hwmon_in,hwmon_in_input,4)==0444);
+ assert(visible(NULL,hwmon_in,hwmon_in_input,5)==0444);
+ assert(!visible(NULL,hwmon_in,hwmon_in_input,6));
+ allow_unsupported=true;assert(!visible(NULL,hwmon_in,hwmon_in_input,4));
+ allow_unsupported=false;known_pd_layout=false;
+ assert(!visible(NULL,hwmon_in,hwmon_in_input,4));
  return 0;
 }
 '''

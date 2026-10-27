@@ -29,6 +29,8 @@
           cp ${./thinkpad_ec_accel.c} thinkpad_ec_accel.c
           cp ${./profiles.h} profiles.h
           cp ${./ec-profile.h} ec-profile.h
+          cp ${./t480-cells.h} t480-cells.h
+          cp ${./t480-pd.h} t480-pd.h
           python3 -m unittest discover -s tests
           touch $out
         '';

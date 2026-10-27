@@ -12,19 +12,20 @@ in {
       description = "Named EC protocol/map profile. Leave null for verified automatic matching.";
     };
     allowUnsupported = lib.mkEnableOption "unverified testing with an explicitly named profile";
-    cellVoltages = lib.mkEnableOption "experimental X230 G2HT35WW battery group reads";
+    pdContract = lib.mkEnableOption "firmware-checked T480 USB-C negotiated voltage reads";
+    cellVoltages = lib.mkEnableOption "experimental firmware/battery-checked cell-group reads";
   };
   config = lib.mkIf cfg.enable {
     assertions = [
       { assertion = !cfg.allowUnsupported || cfg.profile != null;
         message = "thinkpadEc.allowUnsupported requires a named thinkpadEc.profile."; }
-      { assertion = !cfg.allowUnsupported || !cfg.cellVoltages;
-        message = "Experimental profile testing cannot enable cell-voltage debug access."; }
+      { assertion = !cfg.allowUnsupported || !(cfg.cellVoltages || cfg.pdContract);
+        message = "Experimental profile testing cannot enable telemetry debug access."; }
     ];
     boot.extraModulePackages = [ (pkgs.callPackage ./package.nix { kernel = config.boot.kernelPackages.kernel; }) ];
     boot.kernelModules = lib.optional cfg.telemetry "thinkpad_ec_hwmon" ++ lib.optional cfg.accelerometer "thinkpad_ec_accel";
     boot.extraModprobeConfig = ''
-      options thinkpad_ec_hwmon cell_voltages=${if cfg.cellVoltages then "1" else "0"} allow_unsupported=${if cfg.allowUnsupported then "1" else "0"}${lib.optionalString (cfg.profile != null) " profile=${cfg.profile}"}
+      options thinkpad_ec_hwmon pd_contract=${if cfg.pdContract then "1" else "0"} cell_voltages=${if cfg.cellVoltages then "1" else "0"} allow_unsupported=${if cfg.allowUnsupported then "1" else "0"}${lib.optionalString (cfg.profile != null) " profile=${cfg.profile}"}
       options thinkpad_ec_accel probe_only=${if cfg.probeOnly || cfg.allowUnsupported then "1" else "0"} allow_unsupported=${if cfg.allowUnsupported then "1" else "0"}${lib.optionalString (cfg.profile != null) " profile=${cfg.profile}"}
     '';
     services.udev.packages = lib.mkIf cfg.accelerometer [ (pkgs.writeTextFile {

@@ -3,7 +3,7 @@
 | Platform / EC | Status |
 |---|---|
 | X230, product2325DV5, coreboot CBET4000 fosc, EC G2HT35WW | Ordinary sensors and optional cell reads tested on Linux7.2.3 |
-| T480, coreboot, EC N24HT37W | Temperature-only profile tested on Linux 7.2.7; [evidence](t480.md) |
+| T480, coreboot, EC N24HT37W | Temperatures, XYZ acceleration, optional LGC 01AV420 cell groups and USB-C PD voltage tested on Linux 7.3.0; [evidence](t480.md) |
 | Other X230 firmware configurations | Candidates; reports needed |
 | Related Ivy Bridge ThinkPads / same MEC controller | Candidates; firmware protocol and board sensor mapping need checking |
 
@@ -17,10 +17,11 @@ For unlisted hardware, see [explicit candidate-profile testing](adding-support.m
 An unverified temperature test uses raw slot labels and disables electrical and
 debug channels. The old `experimental=1` option no longer exists.
 
-Cell reads require the separate `TP_CELLS` grant, exact G2HT35WW firmware and
-the tested SANYO/LNV-45N1023 battery format. They remain opt-in and are disabled
+Cell reads require the separate `TP_CELLS` grant and an exact supported pair:
+X230 G2HT35WW with SANYO/LNV-45N1023, or T480 N24HT37W with internal
+LGC/LNV-01AV420. They remain opt-in and are disabled
 when `allow_unsupported=1` is supplied. Copying a profile or adding a firmware
-revision does not automatically grant debug support. The tested pack is
+revision does not automatically grant debug support. The tested X230 pack is
 aftermarket; its identity does not establish the origin or age of its cells.
 
 Two captures showed three probable series-group voltages whose sum tracked
@@ -58,3 +59,11 @@ T480 reload: automatic `t480` / `N24HT37W` matching, ten available temperatures,
 and 24 concurrent temperature/battery batches over twelve seconds while fresh
 accelerometer frames continued. No new model or EC revision is claimed by this
 refactor; candidate reports still require the workflow above.
+
+On 2026-10-27 the T480 internal 3S1P pack's group voltages tracked a brief
+load step with 3–9 mV spread; 24 concurrent cell/temperature/ACPI reads passed.
+Both USB-C ports reported the negotiated 20 V contract, with the vacated
+port returning unavailable after a physical charger swap. PD access has a
+separate `TP_PD` capability and `pdContract` opt-in; X230 remains disabled.
+See [cell-group validation](t480-cells.md), [PD validation](t480-pd.md), and
+[the schematic thermal audit](t480-thermal-audit.md).

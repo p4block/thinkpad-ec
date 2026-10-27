@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: WTFPL */
-/* Fixed G2HT35WW battery cache reads. No target-memory write operation. */
+/* Fixed G2HT35WW / N24HT37W battery cache reads. No target-memory write operation. */
 #include <linux/delay.h>
 static bool cell_voltages;
 module_param(cell_voltages, bool, 0400);
-MODULE_PARM_DESC(cell_voltages, "Enable experimental G2HT35WW SANYO cell-group cache reads");
+MODULE_PARM_DESC(cell_voltages, "Enable experimental firmware/battery-checked cell-group cache reads");
 static unsigned long cells_sampled;
 static bool cells_attempted;
 static int cells_error;
@@ -35,7 +35,9 @@ static int read32(u32 addr, u32 *value)
 }
 static int unlock_debug(void)
 {
- static const u8 key[8] = { 0x1,0x1e,0x12,0x10,0xe0,0x78,0xd8,0x89 };
+ static const u8 x230_key[8] = { 0x1,0x1e,0x12,0x10,0xe0,0x78,0xd8,0x89 };
+ static const u8 t480_key[8] = { 0x7a,0x41,0xb1,0x49,0xfe,0x21,0x01,0xcf };
+ const u8 *key = ec_profile->n24ht37w_cells ? t480_key : x230_key;
  u8 saved[8], cmd;
  int i, ret;
  ret=ec_read(0x3d,&cmd);
@@ -55,6 +57,8 @@ restore:
  return ret;
 }
 
+#include "t480-cells.h"
+
 /* cache_lock held by caller. This path never changes EC81 or charger policy. */
 static int cells_snapshot(void)
 {
@@ -68,6 +72,7 @@ static int cells_snapshot(void)
  long values[3], sum, pack;
  /* Only the independently verified debug capability authorizes this RAM layout. */
  if (!cell_voltages || !known_ec_layout) return -ENODATA;
+ if (ec_profile->n24ht37w_cells) return t480_cells_snapshot();
  if (ACPI_FAILURE(acpi_acquire_mutex(NULL, EC_LOCK, 2000))) return -EBUSY;
  ret = ec_read(0x90, &busy);
  if (ret || busy & 0x80) { ret = ret ? ret : -EBUSY; goto unlock; }

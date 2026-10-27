@@ -10,9 +10,11 @@
 
 #include "ec-profile.h"
 static DEFINE_MUTEX(cache_lock);
+static bool known_pd_layout;
 static bool known_ec_layout; /* Exact debug authorization, separate from a map. */
 static unsigned long present;
 #include "cell-voltage.h"
+#include "t480-pd.h"
 static struct platform_device *pdev;
 static unsigned long sampled;
 static bool attempted;
@@ -83,12 +85,17 @@ unlock:
 static umode_t visible(const void *data, enum hwmon_sensor_types type,
                       u32 attr, int channel)
 {
+ if (type == hwmon_in && channel >= 4)
+  return channel < 6 && verified && !allow_unsupported && pd_contract && known_pd_layout &&
+         (attr == hwmon_in_input || attr == hwmon_in_label) ? 0444 : 0;
  if (type == hwmon_temp) {
   if (channel >= temp_count())
    return 0;
   if (verified && ec_profile->hide_unavailable && !(present & BIT(channel)))
    return 0;
- } else if (!electrical_supported()) {
+ } else if (!(type == hwmon_in && channel > 0 &&
+              verified && !allow_unsupported && cell_voltages && known_ec_layout) &&
+             !electrical_supported()) {
   return 0;
  }
  if (type == hwmon_curr)
@@ -189,7 +196,8 @@ static int read_temp(struct device *dev, enum hwmon_sensor_types type,
   return ret;
  }
  if (type == hwmon_in && attr == hwmon_in_input)
-  return channel ? read_cell(channel - 1, value) : read_monitor(value);
+  return channel >= 4 ? read_pd(channel - 4, value) :
+         channel ? read_cell(channel - 1, value) : read_monitor(value);
  if (type != hwmon_temp || attr != hwmon_temp_input)
   return -EOPNOTSUPP;
  mutex_lock(&cache_lock);
@@ -223,7 +231,8 @@ static int read_label(struct device *dev, enum hwmon_sensor_types type,
  if (type == hwmon_in && attr == hwmon_in_label) {
   static const char * const names[] = { "Charger IOUT monitor",
    "Battery0 group A (experimental)", "Battery0 group B (experimental)",
-   "Battery0 group C (experimental)" };
+   "Battery0 group C (experimental)",
+   "USB-C PD0 negotiated", "USB-C PD1 negotiated" };
   *str = names[channel];
   return 0;
  }
@@ -239,6 +248,7 @@ static const struct hwmon_ops ops = {
 static const struct hwmon_channel_info * const channels[] = {
  HWMON_CHANNEL_INFO(in, HWMON_I_INPUT | HWMON_I_LABEL,
   HWMON_I_INPUT | HWMON_I_LABEL, HWMON_I_INPUT | HWMON_I_LABEL,
+  HWMON_I_INPUT | HWMON_I_LABEL, HWMON_I_INPUT | HWMON_I_LABEL,
   HWMON_I_INPUT | HWMON_I_LABEL),
  HWMON_CHANNEL_INFO(power, HWMON_P_INPUT | HWMON_P_LABEL),
  HWMON_CHANNEL_INFO(curr, HWMON_C_INPUT | HWMON_C_LABEL, HWMON_C_INPUT | HWMON_C_LABEL),
@@ -253,8 +263,11 @@ static int __init hwmon_init(void)
  ret = select_ec_profile(TP_HWMON);
  if (ret)
   return ret;
- known_ec_layout = !allow_unsupported && tp_feature_verified(TP_CELLS) && ec_profile->g2ht35ww_cells &&
-                   !strcmp(ec_firmware, "G2HT35WW");
+ known_ec_layout = !allow_unsupported && tp_feature_verified(TP_CELLS) &&
+  ((ec_profile->g2ht35ww_cells && !strcmp(ec_firmware, "G2HT35WW")) ||
+   (ec_profile->n24ht37w_cells && !strcmp(ec_firmware, "N24HT37W")));
+ known_pd_layout = !allow_unsupported && tp_feature_verified(TP_PD) &&
+                   ec_profile->n24ht37w_pd && !strcmp(ec_firmware, "N24HT37W");
  ret = snapshot();
  if (ret)
   return ret;
