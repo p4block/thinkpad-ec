@@ -8,8 +8,8 @@ another model or firmware revision is compatible.
 - `thinkpad_ec_hwmon`: board/battery temperatures; X230 additionally has battery
   current and charger telemetry. Optional X230 cell-group reads stay disabled
   unless explicitly enabled and require their original firmware/battery guards.
-- `thinkpad_ec_accel`: raw X/Y input, fresh-frame heartbeats, acquisition on
-  first open and shutdown on last close. One implementation, checked firmware
+- `thinkpad_ec_accel`: raw X/Y (X230) or X/Y/Z (T480) input, fresh-frame
+  heartbeats, acquisition on first open and shutdown on last close. One implementation, checked firmware
   profiles. No EC debug unlock is used for acceleration or ordinary telemetry.
 
 Desktop rotation lives in [thinkpad-rotate](https://github.com/p4block/thinkpad-rotate).
@@ -63,9 +63,16 @@ sensors
 ```
 
 `probe_only=0` registers the accelerometer. Loading it alone does not start
-acquisition. Its name is `ThinkPad EC accelerometer`, with ABS_X/ABS_Y and
-MSC_TIMESTAMP. Raw counts need per-machine calibration in the consumer.
+acquisition. Its name is `ThinkPad EC accelerometer`, with ABS_X/ABS_Y,
+ABS_Z on T480, and MSC_TIMESTAMP. Raw counts need per-machine calibration in the consumer.
 `active`, `last_error` and `samples` are readable module parameters.
+
+T480 acceleration uses the firmware three-axis command with X/Y converted to
+the existing coordinate system and scale; rotation calibration remains usable.
+`python3 tools/accel_xyz.py` displays all three axes; add `--six-poses` for
+physical validation. The new three-axis path is firmware-traced, tested
+offline and physically validated in six opposite base orientations
+(see the investigation doc).
 
 T480 channels unavailable at registration are hidden. Reload hwmon to discover
 a newly attached battery. Visible channels that lose data return ENODATA.

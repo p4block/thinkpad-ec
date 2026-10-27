@@ -76,3 +76,112 @@ The owner subsequently confirmed calibrated Sway rotation works with all four
 poses calibrated near vertical. Suspend/resume remains unverified. Stock Lenovo
 BIOS is untested and may lack the required ACPI ECLK mutex. Do not widen the
 firmware guard based on shared EC family alone. The calibration tool requires physical poses before rotation.
+
+
+## Three-axis path (2026-10-27)
+
+Rechecked the local N24HT37W payload against the SHA256 above and the saved
+ARC instruction listing and decompilation. This establishes the firmware
+protocol and three-component acquisition. The owner subsequently completed
+the physical six-pose test documented below.
+
+- Command dispatch table at 0x2c998 routes command `0x19` to 0x2cbc6.
+  The handler calls 0x1d634 with maximum count 4 and destination stack+9;
+  its returned count goes at stack+8. It copies all 32 reply bytes from
+  stack+8 into the host response. It consumes no request payload arguments.
+- Wrapper 0x1d634 sets both r2 and r3 to 1 before tail-calling 0x1d39c.
+  In contrast, the legacy wrapper 0x1d62c sets both to zero. These select
+  three-component records and native signed output respectively.
+- The response is byte 0 = count (0..4), followed by four possible records
+  of **signed little-endian A, B, C (16 bits each), then one metadata byte**
+  (stride 7). Byte 29 is remaining available records, byte 30 contains
+  flags, byte 31 is zero in this handler. None of the trailing metadata
+  is an axis. Zero count is no fresh frame, not a zero vector.
+- The acquisition task at 0x1db7a passes three separate output pointers
+  (stack, stack+2, stack+4) to the selected sensor read callback; on success
+  it loads all three signed words and calls 0x1d924 at 0x1db98.
+  That routine stores all three components in the ring at 0x800d08,
+  eight-byte stride. Getter 0x1d39c averages and maps those three independent
+  words. The third component is neither padding nor inferred from X/Y.
+- Legacy formatter 0x1d592..0x1d5be converts mapped native A/B/C to
+  `X = 512 + trunc(-C/80)`, `Y = 512 + trunc(-A/80)`, and
+  `Z = 512 + trunc(B/80)`, but the legacy command omits Z. The updated
+  driver applies that conversion per record before host averaging, retaining
+  the established X/Y calibration and adding the actual third component.
+  These are offset sensor counts, not SI units; native precision is reduced
+  to preserve the existing input ABI. Physical axis signs and counts per g
+  were subsequently measured in the six-pose check below. Four records rather than five also changes the
+  averaging window slightly.
+
+The T480 profile now uses output-only command 0x19 and advertises ABS_Z.
+X230 retains command 0x11 and only ABS_X/ABS_Y. No additional sensor start,
+power, debug, or configuration command is introduced. Mailbox error handling,
+locking, warmup, freshness heartbeats and ownership cleanup remain in place.
+
+### Physical validation
+
+Build/install against the **running kernel**, then stop rotation and any other
+input consumers before unloading the old module. With the NixOS module enabled,
+rebuilding the system normally installs the driver for its configured kernel;
+a reboot selects that kernel and module together. For a manual build using
+matching kernel development headers:
+
+```sh
+make -C /path/to/matching/kernel/build M="$PWD" modules
+systemctl --user stop thinkpad-rotate
+sudo modprobe -r thinkpad_ec_accel
+sudo insmod ./thinkpad_ec_accel.ko probe_only=0
+python3 tools/accel_xyz.py --six-poses
+cat /sys/module/thinkpad_ec_accel/parameters/{active,last_error,samples}
+systemctl --user start thinkpad-rotate
+```
+
+The tool verifies device identity and advertised X/Y/Z support, accepts only
+fresh heartbeat frames, rejects input overflow and moving captures, and asks
+for six opposite orientations of the **base**. It checks nonzero response,
+roughly equal spans, opposite-pose centers and three independent perpendicular
+gravity response vectors. It prints measured medians and a PASS only if these
+checks succeed. Failure may indicate an incorrect pose, motion, or a protocol
+problem; preserve the output for investigation. It opens the normal input
+interface and closes it on completion/error; no direct EC transactions are used.
+
+Offline checks cover signed extremes, four seven-byte records, per-record
+legacy rounding, metadata exclusion, malformed/error/empty frames, the existing
+five-record X230 decoder, and output-only mailbox handling for command 0x19.
+The six-pose checker rejects a constant or duplicated Z. The driver translation
+unit compiles with Linux 7.3.0 exported kernel headers.
+
+### Live validation (2026-10-27)
+
+On T480 / N24HT37W with Linux 7.3.0, the updated accelerometer was built and
+loaded alongside the existing local battery-current extension. An eight-second
+capture delivered 14 fresh XYZ frames, roughly X=512..515, Y=512..514,
+Z=718..721 with the base resting flat. Closing the reader returned active=N
+and last_error=0. Rotation was restarted; EC temperatures and battery-current
+readings remained available. Physical six-pose validation passed as documented
+below. Suspend/resume remains untested.
+
+### Six-pose physical validation (2026-10-27)
+
+The owner ran `python3 tools/accel_xyz.py --six-poses` with the updated driver
+and reported the following stationary medians:
+
+| Base orientation | X | Y | Z |
+| --- | ---: | ---: | ---: |
+| Keyboard up | 513 | 512 | 720 |
+| Keyboard down | 533 | 519 | 314.5 |
+| Left edge down | 513 | 311 | 515 |
+| Right edge down | 515 | 718 | 516 |
+| Front/touchpad edge down | 717 | 513 | 524 |
+| Rear/hinge edge down | 310 | 514 | 522 |
+
+All three opposite-pose spans agree closely: 406.0533, 407.0061 and 407.0061
+counts (approximately 203 counts/g). The normalized response-vector volume is
+0.99890365, close to the ideal 1 for three perpendicular independent axes.
+The check passed. This physically validates a genuine third acceleration axis.
+
+Measured signs: X increases with the front edge down, Y increases with the
+right edge down, and Z increases with the keyboard facing up. The estimated
+zero-g center is [516.8333, 514.5, 518.5833]. These are approximate measurements,
+not a new calibration applied by the driver; small alignment errors and sensor
+bias remain. Suspend/resume is still untested.

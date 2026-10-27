@@ -47,6 +47,10 @@ int main(void){
  assert(index_reg==7 && !memcmp(command_payload,original,32));
  for(int i=0;i<32;i++)assert(reply[i]==i+1);
  reset();memcpy(original,regs+0x10,32);
+ ret=mailbox(0x19,0,reply);
+ assert(!ret && writes==0 && commands==1 && acks==1 && !locks && !pending);
+ assert(index_reg==7 && !memcmp(command_payload,original,32));
+ reset();memcpy(original,regs+0x10,32);
  ret=mailbox(0x17,0x82,reply);
  assert(!ret && writes==64 && commands==1 && acks==1 && !locks && !pending);
  assert(command_payload[0]==0x82 && command_payload[1]==0);

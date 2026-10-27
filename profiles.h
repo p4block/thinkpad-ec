@@ -7,7 +7,7 @@
 #define TP_ACCEL 2
 #define TP_CELLS 4
 
-/* These profiles describe the existing paged EC and two-axis mailbox protocols.
+/* These profiles describe the existing paged EC and accelerometer mailbox protocols.
  * A different protocol needs implementation/evidence, not invented parameters.
  */
 struct tp_temp_channel {
@@ -25,6 +25,7 @@ struct tp_ec_profile {
  bool g2ht35ww_cells;  /* Fixed debug RAM layout, never granted by an override. */
  unsigned short mailbox_port;
  bool check_command_errors;
+ bool accel_xyz; /* N24HT37W command 19: four signed XYZ records. */
 };
 
 static const struct tp_ec_profile tp_profiles[] = {
@@ -54,7 +55,7 @@ static const struct tp_ec_profile tp_profiles[] = {
    {11, "EC slot 11"}, {12, "dGPU VRM area"}, {13, "WLAN area"}
   },
   .hide_unavailable = true, .mailbox_port = 0x1610,
-  .check_command_errors = true,
+  .check_command_errors = true, .accel_xyz = true,
  }
 };
 

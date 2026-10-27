@@ -55,7 +55,7 @@ static int await_response(u8 command)
  return -ETIMEDOUT;
 }
 /* Caller holds sensor_lock; ACPI clients use ECLK around each transaction.
- * Command 11 is output-only on both verified firmware revisions. EC overwrites
+ * Command 11 (both profiles) and 19 (T480) are output-only. EC overwrites
  * the response from the sensor ring without consuming payload arguments.
  * See docs/protocol.md and docs/t480-accelerometer.md for firmware traces.
  * Other commands preserve payload; successful transactions restore the index.
@@ -64,7 +64,7 @@ static int await_response(u8 command)
 static int mailbox(u8 command, u32 argument, u8 *reply)
 {
  u8 saved[32], index;
- bool output_only = command == 0x11;
+ bool output_only = command == 0x11 || command == 0x19;
  int i, ret;
  if (ACPI_FAILURE(acpi_acquire_mutex(NULL, EC_LOCK, 1000)))
   return -EBUSY;
@@ -178,17 +178,52 @@ fail:
  stop_sensor();
  return ret;
 }
+/* N24HT37W 19 exports signed, mapped native axes A/B/C. The legacy 11
+ * formatter returns X=512-C/80, Y=512-A/80. Apply the same conversion per
+ * record (including C integer truncation) to preserve existing calibration.
+ * Z=512+B/80 completes that coordinate system. Never synthesize Z from X/Y.
+ */
+static int decode_frame(const u8 *data, bool xyz, int axes[3])
+{
+ unsigned int count = data[0], i;
+ int sum[3] = { 0, 0, 0 };
+
+ if (count > (xyz ? 4 : 5) || data[31])
+  return -EPROTO;
+ if (!count)
+  return 0;
+ for (i = 0; i < count; i++) {
+  const u8 *record = data + 1 + i * (xyz ? 7 : 5);
+
+  if (xyz) {
+   int a = (s16)get_unaligned_le16(record);
+   int b = (s16)get_unaligned_le16(record + 2);
+   int c = (s16)get_unaligned_le16(record + 4);
+
+   sum[0] += 512 + (-c) / 80;
+   sum[1] += 512 + (-a) / 80;
+   sum[2] += 512 + b / 80;
+  } else {
+   sum[0] += get_unaligned_le16(record);
+   sum[1] += get_unaligned_le16(record + 2);
+  }
+ }
+ for (i = 0; i < 3; i++)
+  axes[i] = sum[i] / (int)count;
+ return count;
+}
 static void poll_sensor(struct input_dev *dev)
 {
  u8 data[32];
- unsigned int x = 0, y = 0, i;
+ int axes[3], count;
  int ret;
  mutex_lock(&sensor_lock);
  if (!active || suspended)
   goto out;
- ret = mailbox(0x11, 0, data);
- if (!ret && (data[0] > 5 || data[31]))
-  ret = -EPROTO;
+ ret = mailbox(ec_profile->accel_xyz ? 0x19 : 0x11, 0, data);
+ count = ret ? ret : decode_frame(data, ec_profile->accel_xyz, axes);
+ if (count < 0)
+  ret = count;
  if (ret) {
   last_error = ret;
   pr_err_ratelimited("thinkpad_ec_accel: acquisition failed: %d\n", ret);
@@ -199,14 +234,12 @@ static void poll_sensor(struct input_dev *dev)
   warmup--;
   goto out;
  }
- if (!data[0])
+ if (!count)
   goto out;
- for (i = 0; i < data[0]; i++) {
-  x += get_unaligned_le16(data + 1 + i * 5);
-  y += get_unaligned_le16(data + 3 + i * 5);
- }
- input_report_abs(dev, ABS_X, x / data[0]);
- input_report_abs(dev, ABS_Y, y / data[0]);
+ input_report_abs(dev, ABS_X, axes[0]);
+ input_report_abs(dev, ABS_Y, axes[1]);
+ if (ec_profile->accel_xyz)
+  input_report_abs(dev, ABS_Z, axes[2]);
  /* Heartbeat permits stale-data detection even when ABS values don't change.
   * This is host receipt time, not an EC hardware acquisition timestamp.
   */
@@ -304,6 +337,8 @@ static int __init accel_init(void)
  __set_bit(INPUT_PROP_ACCELEROMETER, sensor->propbit);
  input_set_abs_params(sensor, ABS_X, 0, 65535, 0, 0);
  input_set_abs_params(sensor, ABS_Y, 0, 65535, 0, 0);
+ if (ec_profile->accel_xyz)
+  input_set_abs_params(sensor, ABS_Z, 0, 65535, 0, 0);
  input_set_capability(sensor, EV_MSC, MSC_TIMESTAMP);
  ret = input_setup_polling(sensor, poll_sensor);
  if (ret)
@@ -319,7 +354,8 @@ static int __init accel_init(void)
   unregister_pm_notifier(&pm_notifier);
   goto free;
  }
- pr_info("thinkpad_ec_accel: %.8s raw X/Y sensor registered; power on demand\n", ec_firmware);
+ pr_info("thinkpad_ec_accel: %.8s raw %s sensor registered; power on demand\n",
+         ec_firmware, ec_profile->accel_xyz ? "X/Y/Z" : "X/Y");
  return 0;
 free:
  input_free_device(sensor);
@@ -341,4 +377,4 @@ static void __exit accel_exit(void)
 module_init(accel_init);
 module_exit(accel_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("ThinkPad X230/T480 EC raw two-axis accelerometer");
+MODULE_DESCRIPTION("ThinkPad X230/T480 EC raw X/Y (X230), X/Y/Z (T480) accelerometer");

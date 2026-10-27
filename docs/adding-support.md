@@ -96,7 +96,7 @@ Illustrative match row, **not evidence that T430 is supported**:
 Accelerometer support can be verified first using a known protocol profile;
 a later temperature profile can supply the board-specific map. The current
 transport implementations use F0..F7 identity, EC81/A0..AF temperature paging,
-and the indexed two-axis mailbox. Profiles do not make fundamentally different
+and the indexed accelerometer mailbox. Profiles do not make fundamentally different
 protocols work: add a separately reviewed implementation when necessary.
 All revisions of a model must share the configured EC-ID transport, or that
 bootstrap needs extending too.

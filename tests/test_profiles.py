@@ -50,6 +50,7 @@ int main(void) {
   assert(p->temp_bytes>0 && p->temp_bytes<=TP_MAX_TEMPS);
   assert(p->temp_count>0 && p->temp_count<=TP_MAX_TEMPS);
   assert(p->ec_lock && p->hwmon_name && p->mailbox_port);
+  assert(p->accel_xyz == !strcmp(p->name,"t480"));
   unsigned slots=0;
   for(int j=0;j<p->temp_count;j++) {
    unsigned slot=p->temps[j].slot;
